@@ -1,11 +1,9 @@
 const users = [];
 
 const addUser = ({ id, username, room }) => {
-    // Cleaning username & room
     username = username.trim().toLowerCase();
     room = room.trim().toLowerCase();
 
-    // Checking for dupclicate user in same room
     const isMatch = users.find((user) => {
         return user.room === room && user.username === username;
     })
@@ -13,13 +11,15 @@ const addUser = ({ id, username, room }) => {
     if (isMatch)
         return { error: "Username Taken !!" }
 
-    // If No Match found then we add that user
-    users.push({ id, username, room });
+    const user = { id, username, room }
+    users.push(user);
+    return { user };
 }
 
 const removeUser = (id) => {
     const index = users.findIndex(user => user.id === id);
-    users.splice(index, 1);
+    if (index !== -1)
+        return users.splice(index, 1)[0];
 }
 
 const getUser = (id) => {

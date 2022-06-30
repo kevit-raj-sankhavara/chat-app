@@ -4,6 +4,7 @@ const http = require('http');
 const socketio = require('socket.io');
 const Filter = require("bad-words");
 const { generateMessage, generateLocationMessage } = require('./utils/messages');
+const { addUser, removeUser, getUser, getUsersInRoom } = require("./utils/users");
 
 const app = express();
 const server = http.createServer(app);
@@ -18,14 +19,25 @@ app.use(express.static(pathToPublic));
 io.on("connection", (socket) => {
     console.log("Connected to server");
 
-    socket.on("join", ({ username, room }) => {
-        // To join that particular room
-        socket.join(room);
+    socket.on("join", ({ username, room }, callback) => {
+        const { error, user } = addUser({ id: socket.id, username, room });
+        if (error)
+            return callback(error);
 
-        // io.to(room-name).emit, socket.broadcat.to(room-name).emit => For that particuler room
+        socket.join(user.room);
 
-        socket.emit("message", generateMessage(`Welcome ${username}`))
-        socket.broadcast.to(room).emit("message", generateMessage(`${username} has joined`));
+        let text = `Welcome ${user.username}`;
+        socket.emit("message", generateMessage("Chat Room", text));
+
+        text = `${user.username} has joined`;
+        socket.broadcast.to(user.room).emit("message", generateMessage("Chat Room", text));
+
+        io.to(user.room).emit("roomData", {
+            room: user.room,
+            users: getUsersInRoom(user.room)
+        })
+
+        callback();
     })
 
     socket.on("sendMsg", (msg, callback) => {
@@ -33,17 +45,31 @@ io.on("connection", (socket) => {
         if (filter.isProfane(msg))
             return callback("Profane word is not allowed");
 
-        io.emit("message", generateMessage(msg));
+        const user = getUser(socket.id);
+
+        io.to(user.room).emit("message", generateMessage(user.username, msg));
         callback();
     })
 
     socket.on("sendLocation", (data, callback) => {
-        io.emit("locationMessage", generateLocationMessage(`https://google.com/maps?q=${data.latitude},${data.longitude}`));
+        const user = getUser(socket.id);
+        const url = `https://google.com/maps?q=${data.latitude},${data.longitude}`;
+
+        io.emit("locationMessage", generateLocationMessage(user.username, url));
         callback();
     })
 
     socket.on("disconnect", () => {
-        io.emit("message", generateMessage("A user has left"));
+        const user = removeUser(socket.id);
+
+        if (user) {
+            io.to(user.room).emit("message", generateMessage("", `${user.username} has left the room !`));
+
+            io.to(user.room).emit("roomData", {
+                room: user.room,
+                users: getUsersInRoom(user.room)
+            })
+        }
     })
 })
 
